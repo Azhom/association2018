@@ -31,6 +31,7 @@ public:
 	double _a, _d;
 	string _ra, _dec;
 	string _identifier;
+	int _red_chunk;
 	vector<Point*> _nearest;
 };
 
@@ -48,6 +49,7 @@ void closest_points(vector< pair<double, Point> >& holder, vector<Point>& pts_ar
 bool pair_point_compare(pair<double, Point>& p1, pair<double, Point>& p2);
 void load_MACHO_stars(vector<Point>& stars, int field_id);
 void load_EROS_stars(vector<Point>& stars, string field);
+void load_OGLE3_stars(vector<Point>& stars, int field);
 void find_stars_in_area(vector<Point>& selected_ones, vector<Point>& stars, Point& origin, double alpha=0.0035, double delta=0.0013, double mininum_separation_distance=1.0e-5, int identifier_range=1);
 void rec_place(Point& origin, Point& to_insert, int i=0);
 void find_nearest_stars(vector<Point>& stars1, vector<Point>& stars2, int vector_size=3);
@@ -70,14 +72,35 @@ int main(){
 	origin._a = 84.6990*M_PI/180.-1.4;
 	origin._d = -64.9931*M_PI/180.+1.2;
 
-	vector<Point> eros_stars, macho_stars;
-	load_EROS_stars(eros_stars, "019");
-	load_EROS_stars(eros_stars, "020");
-	load_MACHO_stars(macho_stars, 3);
-	// load_MACHO_stars(eros_stars, 78);
-	// load_MACHO_stars(macho_stars, 77);
-	// load_MACHO_stars(macho_stars, 6);
-	pointSetMap eros_cells, macho_cells;
+	vector<Point> eros_stars, macho_stars, ogle_stars;
+	// stringstream filename;
+	// for(int i=0; i<=83; i++)
+	// {
+	// 	filename.str(" ");
+	// 	if(i<10){
+	// 		filename << "00" << to_string(i);
+	// 	}
+	// 	else if(i<100){
+	// 		filename << "0" << to_string(i);
+	// 	}
+	// 	else{
+	// 		filename << to_string(i);
+	// 	}
+	// 	load_EROS_stars(eros_stars, filename.str());
+	// }
+
+	// for(int i=100; i<=215; i++)
+	// {
+	// 	load_OGLE3_stars(macho_stars, i);
+	// }
+
+	// load_OGLE3_stars(macho_stars, 175);
+	load_EROS_stars(eros_stars, "060");
+	// load_EROS_stars(eros_stars, "011");
+	// load_EROS_stars(eros_stars, "017");
+	// load_EROS_stars(eros_stars, "018");
+	load_MACHO_stars(macho_stars, 15);
+	pointSetMap eros_cells, macho_cells, ogle_cells;
 
 	loading = chrono::system_clock::now();
 
@@ -90,15 +113,53 @@ int main(){
 	cout << eros_stars.size() << " size" << endl;
 	cout << macho_stars.size() << " size" << endl;
 
-	cout << "Selection closer-closer" << endl;
 
-	ofstream out("./temp.txt");
-	ofstream out1("./idlist.txt");
+	ofstream out2("./temp1.txt");
+	ofstream out12("./idlist1.txt");
 	for(vector<Point>::iterator it = eros_stars.begin(); it!=eros_stars.end(); it++)
 	{
 		if(not it->_nearest.empty() and not it->_nearest[0]->_nearest.empty())
 		{	
-			if(it->_identifier == it->_nearest[0]->_nearest[0]->_identifier)
+			if(it->_identifier == it->_nearest[0]->_nearest[0]->_identifier)// and it->_nearest[1]->_nearest[0]->_identifier == it->_nearest[0]->_nearest[1]->_identifier)
+			{
+				out2 << setprecision(9) << it->_alpha_rad << " " << it->_delta_rad << " " << it->_nearest[0]->_alpha_rad << " "  << it->_nearest[0]->_delta_rad << " " << it->_nearest[1]->_alpha_rad << " " << it->_nearest[1]->_delta_rad << endl;
+				out12 << it->_identifier << " " << it->_nearest[0]->_identifier << endl;
+			}
+		}	
+	}
+	out2.close();
+	out12.close();
+
+	cout << "Correct" << endl;
+	correct_position(macho_cells);
+	cout << "AGAIN !" << endl;
+	macho_cells.clear();
+	divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+	associate(eros_cells, macho_cells, nb_cols, nb_rows);
+
+	cout << "Correct" << endl;
+	correct_position(macho_cells);
+	cout << "AGAIN !" << endl;
+	macho_cells.clear();
+	divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+	associate(eros_cells, macho_cells, nb_cols, nb_rows);
+
+	cout << "Correct" << endl;
+	correct_position(macho_cells);
+	cout << "AGAIN !" << endl;
+	macho_cells.clear();
+	divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+	associate(eros_cells, macho_cells, nb_cols, nb_rows);
+
+	cout << "Selection closer-closer" << endl;
+
+	ofstream out("./temp1.txt");
+	ofstream out1("./idlist1.txt");
+	for(vector<Point>::iterator it = eros_stars.begin(); it!=eros_stars.end(); it++)
+	{
+		if(not it->_nearest.empty() and not it->_nearest[0]->_nearest.empty())
+		{	
+			if(it->_identifier == it->_nearest[0]->_nearest[0]->_identifier)// and it->_nearest[1]->_nearest[0]->_identifier == it->_nearest[0]->_nearest[1]->_identifier)
 			{
 				out << setprecision(9) << it->_alpha_rad << " " << it->_delta_rad << " " << it->_nearest[0]->_alpha_rad << " "  << it->_nearest[0]->_delta_rad << " " << it->_nearest[1]->_alpha_rad << " " << it->_nearest[1]->_delta_rad << endl;
 				out1 << it->_identifier << " " << it->_nearest[0]->_identifier << endl;
@@ -106,6 +167,7 @@ int main(){
 		}	
 	}
 	out.close();
+	out1.close();
 
 	end = chrono::system_clock::now();
 
@@ -281,6 +343,7 @@ void load_MACHO_stars(vector<Point>& stars, int field_id)
 			splitline = split(line, ';');
 			Point p(splitline[3], splitline[4]);
 			p._identifier = splitline[0]+":"+splitline[1]+":"+splitline[2];
+			//p._red_chunk = splitline[6]+splitline[7];
 			stars.push_back(p);
 		}
 	}
@@ -322,6 +385,35 @@ void load_EROS_stars(vector<Point>& stars, string field)
 			else cout << "Could not load file." << endl;
 			f.close();
 		}
+	}
+}
+
+void load_OGLE3_stars(vector<Point>& stars, int field)
+{
+	stringstream filename, identifier;
+	string path = "/Volumes/DisqueSauvegarde/OGLE-III/lmc/";
+	vector<string> splitline;;
+	string line;
+	for(int i=1; i<=8; i++)
+	{
+		filename.str("");
+		filename << path << "lmc" << to_string(field) << "." << to_string(i) << ".map";
+		cout << "Loading " << filename.str() << endl;
+		ifstream f(filename.str());
+		if(f.is_open())
+		{
+			while(getline(f, line))
+			{
+				identifier.str("");
+				splitline = split(line, ' ');
+				Point p(splitline[1], splitline[2]);
+				identifier << to_string(field) << ":" << to_string(i) << ":" << splitline[0];
+				p._identifier = identifier.str();
+				stars.push_back(p);
+			}
+			f.close();
+		}
+		else cout << "Could not load file !" << endl;
 	}
 }
 
@@ -447,15 +539,15 @@ int which_cell(Point& point, Point& origin, int nb_cols, int nb_rows, double wid
 	int row = ntgprt;
 	if(row < 0 or row >= nb_rows)
 	{
-		cout << "Invalid row : " << row << endl;
-		return 0;
+		// cout << "Invalid row : " << row << endl;
+		return -1;
 	}
 	modf((origin._a - point._a)/width*nb_cols, &ntgprt);
 	int col = ntgprt;
 	if(col < 0 or col >= nb_cols)
 	{
-		cout << "Invalid col : " << col << endl;
-		return 0;
+		// cout << "Invalid col : " << col << endl;
+		return -1;
 	}
 	return col+row*nb_cols;
 }
@@ -472,6 +564,7 @@ void divide_in_cells(pointSetMap& cells, vector<Point>& stars, Point& origin, in
 		cells.insert(pair<int, pointSet>(cell_nb, pointSet()));
 		cells[cell_nb].push_back(&*it);
 	}
+	cells.erase(-1);
 }
 
 void correct_position(pointSetMap cells1)
@@ -481,39 +574,59 @@ void correct_position(pointSetMap cells1)
 	{
 		mean_alpha = 0.;
 		mean_delta = 0.;
-		for(int i=0; i<it->second.size(); i++)
+		if(it->second.size()>20)
 		{
-			if(it->second[i]->_nearest.size()>0)
-			{			
-				mean_alpha += it->second[i]->_alpha_rad - it->second[i]->_nearest[0]->_alpha_rad;
-				mean_delta += it->second[i]->_delta_rad - it->second[i]->_nearest[0]->_delta_rad;
+			for(int i=0; i<it->second.size(); i++)
+			{
+				if(it->second[i]->_nearest.size()>0)
+				{			
+					mean_alpha += it->second[i]->_alpha_rad - it->second[i]->_nearest[0]->_alpha_rad;
+					mean_delta += it->second[i]->_delta_rad - it->second[i]->_nearest[0]->_delta_rad;
+				}
 			}
-		}
-		corr_alpha = mean_alpha/it->second.size();
-		corr_delta = mean_delta/it->second.size();
-		for(int i=0; i<it->second.size(); i++)
-		{
-			it->second[i]->_alpha_rad -= corr_alpha;
-			it->second[i]->_delta_rad -= corr_delta;
+			corr_alpha = mean_alpha/it->second.size();
+			corr_delta = mean_delta/it->second.size();
+			for(int i=0; i<it->second.size(); i++)
+			{
+				it->second[i]->_alpha_rad -= corr_alpha;
+				it->second[i]->_delta_rad -= corr_delta;
+			}
 		}
 	}
 }
 
 void associate(pointSetMap cells1, pointSetMap cells2, int nb_cols, int nb_rows)
 {
-	int index;
+	for(pointSetMap::iterator it=cells1.begin(); it!=cells1.end(); it++){
+		for(int i=0; i<it->second.size();i++){
+			it->second[i]->_nearest.clear();}}
+	for(pointSetMap::iterator it=cells2.begin(); it!=cells2.end(); it++){
+		for(int i=0; i<it->second.size();i++){
+			it->second[i]->_nearest.clear();}}
+
+	int index, bar_width=30;
 	pointSet holder;
 	double i=0., max=cells1.size(), prec=100, now=100;
 	for(pointSetMap::iterator it = cells1.begin(); it != cells1.end(); it++)
 	{
-		index = it->first;
+		// Loading bar
 		modf(100*(max-i)/max, &now);
+		cout << "[";
+		for(int j=0; j<bar_width; j++)
+		{
+			if(j*100./bar_width < 100-prec) cout << "=";
+			else cout << " ";
+		}
 		if(now != prec)
 		{
-			cout << now << " " << i << endl;
+			// cout << now << " " << i << endl;
 			prec = now;	
 		}
+		cout << "] " << (100-now) <<" %\r";
+		cout.flush();
 		i++;
+
+		index = it->first;
 		// cout << index << endl;
 		pointSetMap::iterator mcc = cells2.find(index);
 		if(mcc != cells2.end()) holder = mcc->second;
@@ -547,8 +660,32 @@ void associate(pointSetMap cells1, pointSetMap cells2, int nb_cols, int nb_rows)
 	}
 	cout << endl;
 
+
+	i=0.;
+	max=cells2.size();
+	prec=100;
+	now=100;
 	for(pointSetMap::iterator it = cells2.begin(); it != cells2.end(); it++)
 	{
+
+		// Loading bar
+		modf(100*(max-i)/max, &now);
+		cout << "[";
+		for(int j=0; j<bar_width; j++)
+		{
+			if(j*100./bar_width < 100-prec) cout << "=";
+			else cout << " ";
+		}
+		if(now != prec)
+		{
+			// cout << now << " " << i << endl;
+			prec = now;	
+		}
+		cout << "] " << (100-now) <<" %\r";
+		cout.flush();
+		i++;
+
+
 		index = it->first;
 		// cout << index << endl;
 		pointSetMap::iterator mcc = cells1.find(index);
@@ -581,6 +718,7 @@ void associate(pointSetMap cells1, pointSetMap cells2, int nb_cols, int nb_rows)
 		if(not holder.empty()) find_nearest_stars(it->second, holder);
 		holder.clear();
 	}
+	cout << endl;
 }
 
 Point::Point(double adeg, double ddeg)
