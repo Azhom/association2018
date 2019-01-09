@@ -66,6 +66,9 @@ void associate(pointSetMap& cells1, pointSetMap& cells2, int nb_cols, int nb_row
 int correct_position(pointSet& stars);
 void chunkify(vector<Point>& stars, chunkMap& macho_chunks);
 
+double mean(vector<double>& vect);
+double std_deviation(vector<double>& vect);
+
 int main(){
 	cout << "Starting" << endl;
 	chrono::time_point<chrono::system_clock> start, loading, end;
@@ -104,8 +107,10 @@ int main(){
 	associate(eros_cells, macho_cells, nb_cols, nb_rows);
 
 	bool do_continue = true;
+	int counter = 0;
 	while(do_continue)
 	{
+		counter++;
 		for(chunkMap::iterator it=macho_chunks.begin(); it!=macho_chunks.end(); it++)
 		{
 			if(status[it->first]==0)
@@ -122,6 +127,7 @@ int main(){
 		{
 			do_continue = do_continue or not status[it->first];
 		}
+		if(counter>=20) do_continue=false;
 	}
 
 	cout << eros_stars.size() << endl;
@@ -316,7 +322,7 @@ void load_MACHO_stars(vector<Point>& stars, int field_id)
 		while(getline(f, line))
 		{
 			splitline = split(line, ';');
-			if(true)//splitline[6]+splitline[7]=="W23")
+			if(splitline[6]+splitline[7]=="W18")
 			{
 				Point p(splitline[3], splitline[4]);
 				p._identifier = splitline[0]+":"+splitline[1]+":"+splitline[2];
@@ -576,33 +582,50 @@ int correct_position(pointSet& macho_stars)
 			2 if too few stars
 	*/
 {
+	vector<double> alpha_diff, delta_diff, alpha_diff2, delta_diff2;
 	double mean_alpha, mean_delta, corr_alpha, corr_delta, radius;
+	double mean_alpha2, mean_delta2, corr_alpha2, corr_delta2, radius2;
 	int counter;
 	if(macho_stars.size()>100)
 	{
 		mean_alpha = 0.;
 		mean_delta = 0.;
+		mean_alpha2 = 0.;
+		mean_delta2 = 0.;
 		counter = 0;
 		for(int i=0; i<macho_stars.size(); i++)
 		{
-			if(macho_stars[i]->_nearest.size()>0 and macho_stars[i]->_identifier == macho_stars[i]->_nearest[0]->_nearest[0]->_identifier)
+			if(macho_stars[i]->_nearest.size()>1 and macho_stars[i]->_identifier == macho_stars[i]->_nearest[0]->_nearest[0]->_identifier)
 			{
-				mean_alpha += macho_stars[i]->_alpha_rad - macho_stars[i]->_nearest[0]->_alpha_rad;
-				mean_delta += macho_stars[i]->_delta_rad - macho_stars[i]->_nearest[0]->_delta_rad;
-				counter++;
+				alpha_diff.push_back(macho_stars[i]->_alpha_rad - macho_stars[i]->_nearest[0]->_alpha_rad);
+				delta_diff.push_back(macho_stars[i]->_delta_rad - macho_stars[i]->_nearest[0]->_delta_rad);
+
+				alpha_diff2.push_back(macho_stars[i]->_alpha_rad - macho_stars[i]->_nearest[1]->_alpha_rad);
+				delta_diff2.push_back(macho_stars[i]->_delta_rad - macho_stars[i]->_nearest[1]->_delta_rad);
 			}
 		}
-		corr_alpha = mean_alpha/counter;
-		corr_delta = mean_delta/counter;
-		cout << corr_alpha << endl;
-		cout << corr_delta << endl;
+		corr_alpha = mean(alpha_diff);
+		corr_delta = mean(delta_diff);
+		corr_alpha2 = mean(alpha_diff2);
+		corr_delta2 = mean(delta_diff2);
+
+		radius = sqrt(corr_alpha*corr_alpha+corr_delta*corr_delta);
+		radius2 = sqrt(corr_alpha2*corr_alpha2+corr_delta2*corr_delta2);
+		if(std_deviation(alpha_diff) > 1e-7 and std_deviation(delta_diff) > 1e-7)
+		{
+			corr_alpha = corr_alpha2;
+			corr_delta = corr_delta2;
+		}
+
 		for(int i=0; i<macho_stars.size(); i++)
 		{
 			macho_stars[i]->_alpha_rad -= corr_alpha;
 			macho_stars[i]->_delta_rad -= corr_delta;
 			macho_stars[i]->_mod = true;
 		}
-		radius = sqrt(corr_alpha*corr_alpha+corr_delta*corr_delta);
+		
+		cout << radius*180*3600/M_PI << " " << radius2*180*3600/M_PI << endl;
+		cout << std_deviation(alpha_diff)*180*3600/M_PI << " " << std_deviation(delta_diff)*180*3600/M_PI << " : " << std_deviation(alpha_diff2)*180*3600/M_PI << " " << std_deviation(delta_diff2)*180*3600/M_PI << endl;
 		if(radius < 1e-7) return 1;
 		return 0;
 	}
@@ -743,6 +766,28 @@ void associate(pointSetMap& cells1, pointSetMap& cells2, int nb_cols, int nb_row
 		}
 	}
 	cout << endl;
+}
+
+double mean(vector<double>& vect)
+{
+	double mean=0.;
+	for(int i=0; i<vect.size(); i++)
+	{
+		mean+=vect[i];
+	}
+	return mean/vect.size();
+}
+
+double std_deviation(vector<double>& vect)
+{
+	double sd, mean1;
+	sd=0;
+	mean1 = mean(vect);
+	for(int i=0; i<vect.size(); i++)
+	{
+		sd+=pow(vect[i]-mean1, 2);
+	}
+	return sd;
 }
 
 Point::Point(double adeg, double ddeg)
