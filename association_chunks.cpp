@@ -87,48 +87,37 @@ int main(){
 	chunkify(macho_stars, macho_chunks);
 	pointSetMap eros_cells, macho_cells;
 
-	//Initialize status vector
-	map<string, int> status;
-	for(chunkMap::iterator it=macho_chunks.begin(); it!=macho_chunks.end(); it++)
-	{
-		status[it->first]=0;
-		cout << it->first << endl;
-	}
-	cout << status.size() << endl;
-
 	loading = chrono::system_clock::now();
 
-	cout << "Cells" << endl;
 	divide_in_cells(eros_cells, eros_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
-	divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
-	cout << "Looping through chunks" << endl;
-
-	cout << macho_cells.size() << endl;
-	associate(eros_cells, macho_cells, nb_cols, nb_rows);
-
-	bool do_continue = true;
-	int counter = 0;
-	while(do_continue)
+	cout << "Looping through chunks." << endl;
+	bool do_continue;
+	int status, counter;
+	for(chunkMap::iterator it=macho_chunks.begin(); it!=macho_chunks.end(); it++)
 	{
-		counter++;
-		for(chunkMap::iterator it=macho_chunks.begin(); it!=macho_chunks.end(); it++)
+		do_continue = true;
+		status = 0;
+		counter = 0;
+		while(do_continue)
 		{
-			if(status[it->first]==0)
-			{
-				status[it->first] = correct_position(it->second);
-				macho_cells.clear();
-			}
+			counter++;
+			//divide chunks stars in cells
+			macho_cells.clear();
+			divide_in_cells(macho_cells, it->second, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+			//associate with eros stars
+			associate(eros_cells, macho_cells, nb_cols, nb_rows);
+			//correct position of macho stars
+			status = correct_position(it->second);
+			cout << status << endl;
+			if(status or counter>20) do_continue=false;
 		}
-		divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
-		associate(eros_cells, macho_cells, nb_cols, nb_rows);
-
-		do_continue = false;
-		for(map<string, int>::iterator it=status.begin(); it!=status.end(); it++)
-		{
-			do_continue = do_continue or not status[it->first];
-		}
-		if(counter>=20) do_continue=false;
+		cout << it->first << endl;
 	}
+
+	//generate closest stars from corrected macho_stars
+	macho_cells.clear();
+	divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+	associate(eros_cells, macho_cells, nb_cols, nb_rows);
 
 	cout << eros_stars.size() << endl;
 
@@ -322,7 +311,7 @@ void load_MACHO_stars(vector<Point>& stars, int field_id)
 		while(getline(f, line))
 		{
 			splitline = split(line, ';');
-			if(splitline[6]+splitline[7]=="W18")
+			if(true)//splitline[6]+splitline[7]=="W18")
 			{
 				Point p(splitline[3], splitline[4]);
 				p._identifier = splitline[0]+":"+splitline[1]+":"+splitline[2];
