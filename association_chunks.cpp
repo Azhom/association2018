@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <map>
+#include <array>
 
 #include <chrono>
 
@@ -41,6 +42,8 @@ public:
 typedef vector<Point*> pointSet;
 typedef map<int, pointSet> pointSetMap;
 typedef map<string, pointSet> chunkMap;
+typedef map<string, vector<double> > correctionMap;
+typedef map<int, array<int, 4> > neighboursMap;
 
 vector<string> split(string str, char delimiter = ' ');
 double rad_to_deg(double);
@@ -64,13 +67,24 @@ void divide_in_cells(pointSetMap& cells, vector<Point>& stars, Point& origin, in
 void divide_in_cells(pointSetMap& cells, pointSet& stars, Point& origin, int nb_cols, int nb_rows, double width, double height);
 void associate(pointSetMap& cells1, pointSetMap& cells2, int nb_cols, int nb_rows);
 
-int correct_position(pointSet& stars);
+int correct_position(pointSet& stars, correctionMap& corrections, string chunk_id);
 void chunkify(vector<Point>& stars, chunkMap& macho_chunks);
+void neighbour_chunk(string chunk_id, map<string, int>& status, vector<string>& nchunk);
 
 double mean(vector<double>& vect);
 double std_deviation(vector<double>& vect);
 
-int main(){
+int main(int argc, char *argv[]){
+	
+	double macho_field;
+
+	if(argc<3){
+		cerr << "Usage : association_chunks <MACHO_field_id> <EROS_field_1> <EROS_field_2> ..." << endl;
+		return 1;
+	}
+	else{
+		macho_field = stoi(argv[1]);
+	}
 	// DEBUG cout1 << "Starting" << endl;
 	chrono::time_point<chrono::system_clock> start, loading, end;
 	start = chrono::system_clock::now();
@@ -83,114 +97,177 @@ int main(){
 
 	vector<Point> eros_stars, macho_stars;
 	chunkMap macho_chunks;
-	// load_EROS_stars(eros_stars, "044");
-	stringstream filename;
-	for(int i=1; i<=88; i++)
-	{
-		filename.str(" ");
-		if(i<10){
-			filename << "00" << to_string(i);
+
+	if(argv[2]=="all"){
+		//LOAD ALL EROS FIELDS
+		stringstream filename;
+		for(int i=1; i<=88; i++)
+		{
+			filename.str(" ");
+			if(i<10){
+				filename << "00" << to_string(i);
+			}
+			else if(i<100){
+				filename << "0" << to_string(i);
+			}
+			else{
+				filename << to_string(i);
+			}
+			load_EROS_stars(eros_stars, filename.str());
 		}
-		else if(i<100){
-			filename << "0" << to_string(i);
-		}
-		else{
-			filename << to_string(i);
-		}
-		load_EROS_stars(eros_stars, filename.str());
 	}
+	else{
+		for(int i=2; i<argc; i++){
+			load_EROS_stars(eros_stars, argv[i]);
+		}
+	}
+
+
+	pointSetMap eros_cells, macho_cells;
+	load_MACHO_stars(macho_stars, macho_field);
+	chunkify(macho_stars, macho_chunks);
 
 	loading = chrono::system_clock::now();
 
-	pointSetMap eros_cells, macho_cells;
-	int bad_counter=0;
-	int all_counter=0;
-	for(int field=12; field<=82; field++)
+	divide_in_cells(eros_cells, eros_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+	// DEBUG cout1 << "Looping through chunks." << endl;
+	bool do_continue;
+	int counter;
+	map<string, int> status;
+	correctionMap corrections;
+
+/*
+//W9 field 15-060
+	for(int i = 0; i<macho_stars.size(); i++)
 	{
-		cout << field << " " << bad_counter << " " << all_counter << endl;
-
-		load_MACHO_stars(macho_stars, field);
-		chunkify(macho_stars, macho_chunks);
-
-		//LOADING HERE
-
-		divide_in_cells(eros_cells, eros_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
-		// DEBUG cout1 << "Looping through chunks." << endl;
-		bool do_continue;
-		int status, counter;
-		for(chunkMap::iterator it=macho_chunks.begin(); it!=macho_chunks.end(); it++)
+		macho_stars[i]._alpha_rad += -1.99838e-05;
+		macho_stars[i]._delta_rad += 2.00995e-05;
+	}*/
+	for(chunkMap::iterator it=macho_chunks.begin(); it!=macho_chunks.end(); it++)
+	{
+		do_continue = true;
+		status[it->first] = 0;
+		counter = 0;
+		corrections[it->first].push_back(0.);
+		corrections[it->first].push_back(0.);
+		cout << it->first  << " " << it->second.size() << endl;
+		while(do_continue)
 		{
-			do_continue = true;
-			status = 0;
-			counter = 0;
-			//							CHUNK W9 CHAMPS 15-060
-			// if(it->first=="W9")
-			// {
-			// 	string line;
-			// 	vector<string> splitline;
-			// 	double corr_alpha, corr_delta;
-			// 	corr_alpha = 0;
-			// 	corr_delta = 0;
-			// 	ifstream manual_input_file("/Users/tristanblaineau/Documents/Work/MACHO-EROS_fits/disp.txt");
-			// 	while(getline(manual_input_file, line))
-			// 	{
-			// 		splitline = split(line, ' ');
-			// 		corr_alpha += stod(splitline[0]);
-			// 		corr_delta += stod(splitline[1]);
-			// 	}
-			// 	for(int i=0; i<it->second.size(); i++)
-			// 	{
-			// 		it->second[i]->_alpha_rad -= corr_alpha;
-			// 		it->second[i]->_delta_rad -= corr_delta;
-			// 	}
-			// }
-			while(do_continue)
-			{
-				counter++;
-				//divide chunks stars in cells
-				macho_cells.clear();
-				divide_in_cells(macho_cells, it->second, origin, nb_cols, nb_rows, 0.140485, 0.139755);
-				//associate with eros stars
-				associate(eros_cells, macho_cells, nb_cols, nb_rows);
-				//correct position of macho stars
-				status = correct_position(it->second);
-				// DEBUG cout1 << status << endl;
-				if(status or counter>20) do_continue=false;
-			}
-			// DEBUG cout1 << it->first << endl;
-			if(not status) bad_counter++;
-			all_counter++;
+			counter++;
+			//divide chunks stars in cells
+			macho_cells.clear();
+			divide_in_cells(macho_cells, it->second, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+			//associate with eros stars
+			associate(eros_cells, macho_cells, nb_cols, nb_rows);
+			//correct position of macho stars
+			status[it->first] = correct_position(it->second, corrections, it->first);
+			// DEBUG cout1 << status << endl;
+			if(status[it->first] or counter>20) do_continue=false;
 		}
-
-		//generate closest stars from corrected macho_stars
-		macho_cells.clear();
-		divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
-		associate(eros_cells, macho_cells, nb_cols, nb_rows);
-
-		// DEBUG cout1 << eros_stars.size() << endl;
-
-		// DEBUG cout1 << "Selection closer-closer" << endl;
-
-		ofstream out(to_string(field)+".txt");
-		for(vector<Point>::iterator it = eros_stars.begin(); it!=eros_stars.end(); it++)
-		{
-			if(not it->_nearest.empty() and not it->_nearest[0]->_nearest.empty())
-			{	
-				if(it->_identifier == it->_nearest[0]->_nearest[0]->_identifier)// and it->_nearest[1]->_nearest[0]->_identifier == it->_nearest[0]->_nearest[1]->_identifier)
-				{
-					out << setprecision(9) << it->_identifier << " " << it->_alpha_rad << " " << it->_delta_rad << " " << it->_nearest[0]->_identifier << " " << it->_nearest[0]->_alpha_rad << " "  << it->_nearest[0]->_delta_rad << " " << it->_nearest[1]->_alpha_rad << " " << it->_nearest[1]->_delta_rad << " " << it->_nearest[0]->_alpha_rad_old << " " << it->_nearest[0]->_delta_rad_old <<endl;
-				}
-			}	
-		}
-		out.close();
-
-		eros_cells.clear();
-		macho_cells.clear();
-		macho_chunks.clear();
-		macho_stars.clear();
-
-
+		
 	}
+
+
+
+//ADDITIONNAL CORRECTIONS
+	vector<string> nchunk;
+	string temp_chunk;
+	correctionMap dummy;
+	for(map<string, int>::iterator it=status.begin(); it != status.end(); it++)
+	{
+		//select unconverged chunk
+		if(it->second == 0)
+		{
+			//get chunk_id of neighbouring converged chunk
+			cout << "for chunk " << it->first << endl;
+			nchunk.clear();
+			neighbour_chunk(it->first, status, nchunk);
+			if(nchunk.size()!=0)
+			{
+				for(int j=0; j < nchunk.size(); j++)
+				{
+					temp_chunk = nchunk[j];
+					cout << "Trying chunk " << temp_chunk << endl;
+					// correct position of each stars in chunk
+					for(int i = 0; i < macho_chunks[it->first].size(); i++)
+					{
+						macho_chunks[it->first][i]->_alpha_rad = macho_chunks[it->first][i]->_alpha_rad_old + corrections[temp_chunk][0];
+						macho_chunks[it->first][i]->_delta_rad = macho_chunks[it->first][i]->_delta_rad_old + corrections[temp_chunk][1];
+					}
+
+					//correcting loop for chunk it->first
+					do_continue = true;
+					counter = 0;
+					cout << "Redoing "<<it->first << endl;
+					if(it->second) do_continue=false;
+					while(do_continue)
+					{
+						counter++;
+						//divide chunks stars in cells
+						macho_cells.clear();
+						divide_in_cells(macho_cells, macho_chunks[it->first], origin, nb_cols, nb_rows, 0.140485, 0.139755);
+						//associate with eros stars
+						associate(eros_cells, macho_cells, nb_cols, nb_rows);
+						//correct position of macho stars
+						dummy[it->first].push_back(0);
+						dummy[it->first].push_back(0);
+						it->second = correct_position(macho_chunks[it->first], dummy, it->first);
+						// DEBUG cout1 << status << endl;
+						if(it->second or counter>20) do_continue=false;
+					}
+					cout << corrections[temp_chunk][0] << " " << corrections[temp_chunk][1] << endl;
+					if(it->second) break;
+				}
+			}
+			else cout << "No unconverged neighbouring chunk of chunk " << it->first << endl;
+		}
+	}
+
+	// for(map<string, int>::iterator it=status.begin(); it != status.end(); it++)
+	// {
+	// 	//select unconverged chunk
+	// 	if(it->second == 0)
+	// 	{
+	// 		//reinit unconverged chunks
+	// 		for(int i = 0; i < macho_chunks[it->first].size(); i++)
+	// 		{
+	// 			macho_chunks[it->first][i]->_alpha_rad = macho_chunks[it->first][i]->_alpha_rad_old;
+	// 			macho_chunks[it->first][i]->_delta_rad = macho_chunks[it->first][i]->_delta_rad_old;
+	// 		}
+	// 	}
+	// }
+
+
+
+
+
+	//generate closest stars from corrected macho_stars
+	macho_cells.clear();
+	divide_in_cells(macho_cells, macho_stars, origin, nb_cols, nb_rows, 0.140485, 0.139755);
+	associate(eros_cells, macho_cells, nb_cols, nb_rows);
+
+	// DEBUG cout1 << eros_stars.size() << endl;
+
+	// DEBUG cout1 << "Selection closer-closer" << endl;
+
+	ofstream out(to_string(static_cast<int>(macho_field))+".txt");
+	for(vector<Point>::iterator it = eros_stars.begin(); it!=eros_stars.end(); it++)
+	{
+		if(not it->_nearest.empty() and not it->_nearest[0]->_nearest.empty())
+		{	
+			if(it->_identifier == it->_nearest[0]->_nearest[0]->_identifier)// and it->_nearest[1]->_nearest[0]->_identifier == it->_nearest[0]->_nearest[1]->_identifier)
+			{
+				out << setprecision(9) << it->_identifier << " " << it->_alpha_rad << " " << it->_delta_rad << " " << it->_nearest[0]->_identifier << " " << it->_nearest[0]->_alpha_rad << " "  << it->_nearest[0]->_delta_rad << " " << it->_nearest[1]->_alpha_rad << " " << it->_nearest[1]->_delta_rad << " " << it->_nearest[0]->_alpha_rad_old << " " << it->_nearest[0]->_delta_rad_old <<endl;
+			}
+		}	
+	}
+	out.close();
+
+	eros_cells.clear();
+	macho_cells.clear();
+	macho_chunks.clear();
+	macho_stars.clear();
+
 	end = chrono::system_clock::now();
 
 	cout << "Finished." << endl;
@@ -363,7 +440,7 @@ void load_MACHO_stars(vector<Point>& stars, int field_id)
 		while(getline(f, line))
 		{
 			splitline = split(line, ';');
-			if(true)//splitline[6]+splitline[7]=="W9")
+			if(splitline[6]+splitline[7]!="E255" and splitline[6]+splitline[7]!="W255")// and (splitline[6]+splitline[7]=="W13" or splitline[6]+splitline[7]=="W9")) //<-DEBUG PURPOSE
 			{
 				Point p(splitline[3], splitline[4]);
 				p._identifier = splitline[0]+":"+splitline[1]+":"+splitline[2];
@@ -615,7 +692,7 @@ void divide_in_cells(pointSetMap& cells, vector<Point*>& stars, Point& origin, i
 	cells.erase(-1);
 }
 
-int correct_position(pointSet& macho_stars)
+int correct_position(pointSet& macho_stars, correctionMap& corrections, string chunk_id)
 	/*
 
 	return: 0 if radius too wide
@@ -669,12 +746,19 @@ int correct_position(pointSet& macho_stars)
 			macho_stars[i]->_delta_rad -= corr_delta;
 			macho_stars[i]->_mod = true;
 		}
-		
+
+		if(corrections[chunk_id].size()==0) cerr << "corrections not initilized !" << endl;
+		corrections[chunk_id][0] -= corr_alpha;
+		corrections[chunk_id][1] -= corr_delta;
+
 		// DEBUG cout1 << radius*3600*180/M_PI << " " << radius2*3600*180/M_PI << endl;
 		// DEBUG cout1 << corr_alpha << " " << corr_delta << " : " << corr_alpha2 << " " << corr_delta2 << endl;
 		// DEBUG cout1 << std_deviation(alpha_diff)*180*3600/M_PI << " " << std_deviation(delta_diff)*180*3600/M_PI << " : " << std_deviation(alpha_diff2)*180*3600/M_PI << " " << std_deviation(delta_diff2)*180*3600/M_PI << endl;
-		if(radius*3600*180/M_PI < 0.2 and std_deviation(alpha_diff)*180*3600/M_PI<2.5 and std_deviation(delta_diff)*180*3600/M_PI<1.5) return 1;
-		return 0;
+		if(radius*3600*180/M_PI < 0.2 and std_deviation(alpha_diff)*180*3600/M_PI<2.5 and std_deviation(delta_diff)*180*3600/M_PI<1.5)
+		{
+			return 1;
+		}
+		else return 0;
 	}
 	else 
 		// DEBUG cout1 << "Too few stars in chunk to correct" << endl;
@@ -836,6 +920,60 @@ double std_deviation(vector<double>& vect)
 	}
 	sd = sqrt(sd/(vect.size()-1));
 	return sd;
+}
+
+void neighbour_chunk(string chunk_id, map<string, int>& status, vector<string>& nchunk)
+/* 
+	Return id of a converged neighbouring chunk (in the same CCD 1/4)
+*/
+{
+	nchunk.clear();
+	neighboursMap neighbours 
+	{
+		{ 1, array<int, 4>{ 0,  1,  4,  5}},
+		{ 2, array<int, 4>{ 2,  3,  6,  7}},
+		{ 3, array<int, 4>{10, 11, 14, 15}},
+		{ 4, array<int, 4>{ 8,  9, 12, 13}},
+		{ 5, array<int, 4>{16, 17, 20, 21}},
+		{ 6, array<int, 4>{18, 19, 22, 23}},
+		{ 7, array<int, 4>{48, 49, 52, 53}},
+		{ 8, array<int, 4>{50, 51, 54, 55}},
+		{ 9, array<int, 4>{40, 41, 44, 45}},
+		{10, array<int, 4>{42, 43, 46, 47}},
+		{11, array<int, 4>{24, 25, 28, 29}},
+		{12, array<int, 4>{26, 27, 30, 31}},
+		{13, array<int, 4>{32, 33, 36, 37}},
+		{14, array<int, 4>{34, 35, 38, 39}}
+	};
+
+	int id = stoi(chunk_id.substr(1));
+	char pier = chunk_id[0];
+	int key = -1;
+	cout << " get key" << endl;
+	for(neighboursMap::iterator it = neighbours.begin(); it!=neighbours.end(); it++)
+	{
+		if(find(it->second.begin(), it->second.end(), id) != it->second.end())
+		{
+			key = it->first;
+			break;
+		}
+	}
+	if(key==-1)
+	{
+		cerr << "Error : chunk not found in neighbours search." << endl;
+	}
+	cout << "return chunk n" << endl;
+	map<string, int>::iterator found_chunk;
+	for(int i=0; i<4; i++)
+	{
+		found_chunk = status.find(pier+to_string(neighbours[key][i]));
+		if(found_chunk != status.end() and found_chunk->second != 0)
+		{
+			cout << pier+to_string(neighbours[key][i]) << endl;
+			nchunk.push_back(pier+to_string(neighbours[key][i]));
+		}
+	}
+	cout << nchunk.size() << "neighbouring converged chunks found." << endl;
 }
 
 Point::Point(double adeg, double ddeg)
